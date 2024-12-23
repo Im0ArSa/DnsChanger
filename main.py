@@ -1,4 +1,4 @@
-import json
+import json,pyuac,dns.resolver
 from PIL import Image
 import customtkinter as ctk
 import psutil,subprocess
@@ -21,7 +21,7 @@ class RedMoneky(ctk.CTk):
         self.ImgLb.place(relx=0.2, rely=0.23, anchor="center")
     
         self.DnsSJsonData = self.ReadConfig()
-        self.DnsS = [i for i in self.DnsSJsonData.keys()]
+        self.DnsS = [i for i in self.DnsSJsonData.keys()] + ['Custom']
         self.AdpS = ["All Adaptors"] + [adaptor for adaptor in self.GetAdaptors()]
         self.AdpComboBoxLabel = ctk.CTkLabel(self, text="Network Adaptor")
         self.AdpComboBoxLabel.place(relx=0.499, rely=0.05, anchor="center",)
@@ -49,32 +49,77 @@ class RedMoneky(ctk.CTk):
 
         self.SetBt = ctk.CTkButton(self, text="Set Dns", command=self.SetDNSBut,border_color="#FCE6DE",border_width=1,fg_color="#C83833",hover_color="#342523",text_color="#ffffff",text_color_disabled="#B3A39D")
         self.SetBt.place(relx=0.7, rely=0.55, anchor="center")
-        self.ResetBt = ctk.CTkButton(self, text="Reset Dns", command=self.SetDNSBut,border_color="#FCE6DE",border_width=1,fg_color="#C83833",hover_color="#342523",text_color="#ffffff",text_color_disabled="#B3A39D")
+        self.ResetBt = ctk.CTkButton(self, text="Reset Dns", command=self.ResetDNSBut,border_color="#FCE6DE",border_width=1,fg_color="#C83833",hover_color="#342523",text_color="#ffffff",text_color_disabled="#B3A39D")
         self.ResetBt.place(relx=0.55, rely=0.25, anchor="center")
         self.FlushBt = ctk.CTkButton(self, text="Flush Dns", command=self.SetDNSBut,border_color="#FCE6DE",border_width=1,fg_color="#C83833",hover_color="#342523",text_color="#ffffff",text_color_disabled="#B3A39D")
         self.FlushBt.place(relx=0.55, rely=0.4, anchor="center")
 
 
+        self.SetUp()
+
+
+    def SetUp(self):
+        CurrentDns = self.CurrentDns()
+        self.DisEnEntrys(False)
+        self.Dns1In.delete(0,ctk.END)
+        self.Dns1In.insert(0,CurrentDns[0])
+        self.Dns2In.delete(0,ctk.END)
+        self.Dns2In.insert(0,CurrentDns[1])
+        self.DisEnEntrys(True)
+        for Name,DnsS in self.DnsSJsonData.items():
+            print(Name,DnsS,str(CurrentDns[0]) == DnsS['Primary'],str(CurrentDns[1]) == DnsS['Alternative'])
+            if str(CurrentDns[0]) == DnsS['Primary'] and str(CurrentDns[1]) == DnsS['Alternative']:
+                self.DnsComboBox.set(Name)
+                break
+            else:
+                self.DnsComboBox.set('Custom')
+
+
+
+    def DisEnEntrys(self,Disable):
+        if Disable:
+            self.Dns1In.configure(state = "disabled")
+            self.Dns2In.configure(state = "disabled")
+        else:
+            self.Dns1In.configure(state = "normal")
+            self.Dns2In.configure(state = "normal")
+
 
     def ComboDnsFunc(self,OptionSelected):
         if OptionSelected != "Custom":
+            self.DisEnEntrys(False)
             self.Dns1In.delete(0,ctk.END)
             self.Dns1In.insert(0,self.DnsSJsonData[OptionSelected]['Primary'])
             self.Dns2In.delete(0,ctk.END)
             self.Dns2In.insert(0,self.DnsSJsonData[OptionSelected]['Alternative'])
+            self.DisEnEntrys(True)
+        else :
+            self.DisEnEntrys(False)
+            self.Dns1In.delete(0,ctk.END)
+            self.Dns2In.delete(0,ctk.END)
 
 
     def SetDNSBut(self):
         SelectedDns = self.DnsComboBox.get()
         PrimaryDns = self.Dns1In.get()
         AlternativeDns = self.Dns2In.get()
-        Adaptor = self.AdpComboBox.get()
+        Adaptor = [self.AdpComboBox.get()]  if self.AdpComboBox.get() != "All Adaptors" else [Adaptor for Adaptor in self.GetAdaptors()]
         if SelectedDns != "Custom":
-            self.SetDns(Adaptor,self.DnsSJsonData[SelectedDns]['Primary'],self.DnsSJsonData[SelectedDns]['Alternative'])
+            for Adp in Adaptor:
+                self.SetDns(Adp,self.DnsSJsonData[SelectedDns]['Primary'],self.DnsSJsonData[SelectedDns]['Alternative'])
         else:
+            
             PrimaryDns = self.Dns1In.get()
             AlternativeDns = self.Dns2In.get()
-            self.SetDns(Adaptor,PrimaryDns,AlternativeDns)
+            for Adp in Adaptor:
+                self.SetDns(Adp,PrimaryDns,AlternativeDns)
+
+
+    def ResetDNSBut(self):
+        Adaptor = [self.AdpComboBox.get()]  if self.AdpComboBox.get() != "All Adaptors" else [Adaptor for Adaptor in self.GetAdaptors()]
+        for Adp in Adaptor:
+            self.ResetDNS(Adp)
+
 
 
 
@@ -111,6 +156,9 @@ class RedMoneky(ctk.CTk):
         with open("DnsS.json", 'w') as file:
             return json.dump(self.DnsSJsonData,file,indent=4)
 
+    def CurrentDns(self):
+        DnsS = dns.resolver.Resolver()
+        return DnsS.nameservers
             
     def SetDns(self, AdpName, PrimDns, AltDns=None):
         try:
@@ -134,6 +182,9 @@ class RedMoneky(ctk.CTk):
         
 
 if __name__ == "__main__":
-
-    app = RedMoneky()
-    app.mainloop()
+    # Run As Adminnn ;D
+    if not pyuac.isUserAdmin():
+        pyuac.runAsAdmin()
+    else:        
+        app = RedMoneky()
+        app.mainloop()
