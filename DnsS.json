@@ -1,4 +1,5 @@
 {
     "Radar" : {"Primary" : "10.202.10.10","Alternative" : "10.202.10.11"},
-    "Electro" : {"Primary" : "78.157.42.100","Alternative" : "78.157.42.101"}
+    "Electro" : {"Primary" : "78.157.42.100","Alternative" : "78.157.42.101"},
+    "Google" : {"Primary" : "8.8.8.8","Alternative" : "8.8.4.4"}
 }
