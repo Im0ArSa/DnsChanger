@@ -1,8 +1,7 @@
-import json,dns.resolver,winsound,asyncio
+import json,dns.resolver,winsound,pyuac,ipaddress,psutil,subprocess
 from CustomTkinterMessagebox import CTkMessagebox
 from PIL import Image
 import customtkinter as Ctk
-import psutil,subprocess
 
 Ctk.set_appearance_mode("Dark")
 Ctk.set_default_color_theme("dark-blue")
@@ -34,7 +33,7 @@ class RedMoneky(Ctk.CTk):
         self.AdpComboBox.set(self.AdpS[0])
         self.AdpComboBox.place(relx=0.55, rely=0.1, anchor="center")
 
-
+        
 
         self.DnsComboBoxLabel = Ctk.CTkLabel(self, text="Dns Server")
         self.DnsComboBoxLabel.place(relx=0.79, rely=0.05, anchor="center")
@@ -74,6 +73,7 @@ class RedMoneky(Ctk.CTk):
         for Name,DnsS in self.DnsSJsonData.items():
             if str(CurrentDns[0]) == DnsS['Primary'] and str(CurrentDns[1]) == DnsS['Alternative']:
                 self.DnsComboBox.set(Name)
+                self.DisEnEntrys(True)
                 break
             else:
                 self.DnsComboBox.set('Custom')
@@ -124,6 +124,48 @@ class RedMoneky(Ctk.CTk):
             WhichSeted = {}
             PrimaryDns = self.Dns1In.get()
             AlternativeDns = self.Dns2In.get()
+            # Valid Check
+            if self.CheckDns(PrimaryDns):
+                if AlternativeDns and not self.CheckDns(AlternativeDns):
+                    self.MsgBox("Invalid Custom Dns !",
+                        "The Alternate Dns is not valid.")
+                    return
+            else:
+                self.MsgBox("Invalid Custom Dns !",
+                        "The Primary Dns is not valid.")
+                return
+            #-------------------------------------------------------------------------------------------------
+            # Is A Saved Dns ?
+            for Name,DnsS in self.DnsSJsonData.items():
+                if str(PrimaryDns) == DnsS['Primary'] and str(AlternativeDns) == DnsS['Alternative']:
+                    self.DnsComboBox.set(Name)
+                    SelectedDns = Name
+                    break
+                else:
+                    SelectedDns = 'Custom'
+                    self.DisEnEntrys(False)
+            #-------------------------------------------------------------------------------------------------
+            # Save And NewName
+            if SelectedDns == 'Custom' :
+                if self.YesOrNo("New Dns !","Do You Want This DNS to be Saved?"):
+                    IsName,Name = self.InputDialog("Dns Name","Type Valid Name !")
+                    if IsName :
+                        if not Name in [i for i in self.DnsSJsonData.keys()]:
+                            self.DnsSJsonData[Name] = {}
+                            self.DnsSJsonData[Name]["Primary"] = PrimaryDns
+                            self.DnsSJsonData[Name]["Alternative"] = AlternativeDns
+                            self.SaveConfig()
+                            self.ReadConfig()
+                            self.DnsS = [i for i in self.DnsSJsonData.keys()] + ['Custom']
+                            self.DnsComboBox.configure(values=self.DnsS)
+                        else:
+                            self.MsgBox("Invalid Dns Name !",
+                                "Try Again !")
+                            return
+            #-------------------------------------------------------------------------------------------------
+
+
+            # Set
             for Adp in Adaptor:
                 if self.SetDns(Adp,PrimaryDns,AlternativeDns):
                     WhichSeted[Adp] = True
@@ -190,7 +232,105 @@ class RedMoneky(Ctk.CTk):
         if Sound:
             winsound.PlaySound("C:\\Windows\\Media\\Windows Notify System Generic.wav", winsound.SND_FILENAME | winsound.SND_ASYNC)
 
+    
+    
 
+    def YesOrNo(Master, Title: str, Text: str, Sound=True, ButtonText: list = ["Ok", "No"], Size='230x170', Center="Master", TopWindow=True):
+        result = None
+        MsgBox = Ctk.CTkToplevel(Master)
+        MsgBox.geometry(Size)
+        MsgBox.title(Title)
+        MsgBox.resizable(False, False)
+        MsgBox.attributes('-toolwindow', True, '-topmost', TopWindow)
+        MsgBox.grab_set()
+
+        def OkBut():
+            nonlocal result
+            result = True
+            MsgBox.destroy()
+
+        def NoBut():
+            nonlocal result 
+            result = False
+            MsgBox.destroy()
+
+        if Center == "Master":
+            MsgBox.update_idletasks()
+            X = Master.winfo_x() + (Master.winfo_width() - int(Size.split("x")[0])) // 2
+            Y = Master.winfo_y() + (Master.winfo_height() - int(Size.split("x")[1])) // 2
+            MsgBox.geometry(f"{Size}+{X}+{Y}")
+        elif Center == "Screen":
+            MsgBox.update_idletasks()
+            MsgBox.geometry(f"+{(MsgBox.winfo_screenwidth()) // 2}+{(MsgBox.winfo_screenheight()) // 2}")
+
+        TextLabel = Ctk.CTkLabel(MsgBox, text=Text)
+        TextLabel.pack(pady=30)
+
+        MsgFrame = Ctk.CTkFrame(MsgBox, height=1)
+        MsgFrame.pack(side="bottom", fill="x")
+
+        But1 = Ctk.CTkButton(MsgFrame, text=ButtonText[0], command=OkBut, border_color="#FCE6DE", border_width=1, fg_color="#C83833", hover_color="#342523", text_color="#ffffff", text_color_disabled="#B3A39D")
+        But1.pack(pady=3)
+        But2 = Ctk.CTkButton(MsgFrame, text=ButtonText[1], command=NoBut, border_color="#FCE6DE", border_width=1, fg_color="#C83833", hover_color="#342523", text_color="#ffffff", text_color_disabled="#B3A39D")
+        But2.pack(pady=3)
+
+        if Sound:
+            winsound.PlaySound("C:\\Windows\\Media\\Windows Notify System Generic.wav", winsound.SND_FILENAME | winsound.SND_ASYNC)
+
+        MsgBox.wait_window(MsgBox)
+        
+        return result
+    
+    def InputDialog(Master, Title: str, Text: str, Sound=True, ButtonText: list = ["Ok", "Cancel"], Size='200x170', Center="Master", TopWindow=True):
+        result = None
+        TextOut = None
+
+        MsgBox = Ctk.CTkToplevel(Master)
+        MsgBox.geometry(Size)
+        MsgBox.title(Title)
+        MsgBox.resizable(False, False)
+        MsgBox.attributes('-toolwindow', True, '-topmost', TopWindow)
+        MsgBox.grab_set()
+
+        def OkBut():
+            nonlocal result, TextOut
+            result = True
+            TextOut = Entry.get()
+            MsgBox.destroy()
+
+        def NoBut():
+            nonlocal result
+            result = False
+            MsgBox.destroy()
+
+        if Center == "Master":
+            MsgBox.update_idletasks()
+            X = Master.winfo_x() + (Master.winfo_width() - int(Size.split("x")[0])) // 2
+            Y = Master.winfo_y() + (Master.winfo_height() - int(Size.split("x")[1])) // 2
+            MsgBox.geometry(f"{Size}+{X}+{Y}")
+        elif Center == "Screen":
+            MsgBox.update_idletasks()
+            MsgBox.geometry(f"+{(MsgBox.winfo_screenwidth()) // 2}+{(MsgBox.winfo_screenheight()) // 2}")
+
+
+        Entry = Ctk.CTkEntry(MsgBox,placeholder_text = Text, width = int((int(Size.split("x")[0]) * 70) / 100),fg_color="#C83833",border_color="#FCE6DE",border_width=1,text_color="#FCE6DE",placeholder_text_color="#FFFFFF")
+        Entry.place(relx=0.50, rely=0.3, anchor="center")
+
+        MsgFrame = Ctk.CTkFrame(MsgBox, height=1)
+        MsgFrame.pack(side="bottom", fill="x")
+
+        But1 = Ctk.CTkButton(MsgFrame, text=ButtonText[0], command=OkBut, border_color="#FCE6DE", border_width=1, fg_color="#C83833", hover_color="#342523", text_color="#ffffff", text_color_disabled="#B3A39D")
+        But1.pack(pady=3)
+
+        But2 = Ctk.CTkButton(MsgFrame, text=ButtonText[1], command=NoBut, border_color="#FCE6DE", border_width=1, fg_color="#C83833", hover_color="#342523", text_color="#ffffff", text_color_disabled="#B3A39D")
+        But2.pack(pady=3)
+
+        if Sound:
+            winsound.PlaySound("C:\\Windows\\Media\\Windows Notify System Generic.wav", winsound.SND_FILENAME | winsound.SND_ASYNC)
+
+        MsgBox.wait_window(MsgBox)
+
+        return result, TextOut
 
 
     def GetAdaptors(self):
@@ -215,15 +355,13 @@ class RedMoneky(Ctk.CTk):
     def FlushDNS(self):
         subprocess.run('ipconfig /flushdns', stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True)
         return True
-            
-
 
     def ReadConfig(self):
         with open("DnsS.json", 'r') as file:
             return json.load(file)
     
 
-    def WriteConfig(self):
+    def SaveConfig(self):
         with open("DnsS.json", 'w') as file:
             return json.dump(self.DnsSJsonData,file,indent=4)
 
@@ -231,6 +369,16 @@ class RedMoneky(Ctk.CTk):
         DnsS = dns.resolver.Resolver()
         return DnsS.nameservers
             
+
+
+    def CheckDns(self,DNS):
+        try:
+            ipaddress.ip_address(DNS)
+            return True
+        except:
+            return False
+        
+
     def SetDns(self, AdpName, PrimDns, AltDns=None):
         try:
             Cmd = f'netsh interface ip set dns name="{AdpName}" source=static addr={PrimDns} register=PRIMARY'
@@ -249,9 +397,17 @@ class RedMoneky(Ctk.CTk):
         except Exception:
             return False
 
-        
+
+
+
+
 
 
 if __name__ == "__main__":
+    # if not pyuac.isUserAdmin():
+    #     pyuac.runAsAdmin()
+    # else:        
+    #     app = RedMoneky()
+    #     app.mainloop()
     app = RedMoneky()
     app.mainloop()
